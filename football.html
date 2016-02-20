@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+
+    <link rel="stylesheet" type="text/css" href="node_modules/jquery-ui-browserify/themes/base/jquery.ui.all.css">
+
+    <script src="node_modules/jquery/dist/jquery.min.js"></script>
+
+    <script src="node_modules/jquery-ui-browserify/dist/jquery-ui.min.js"></script>
+
+
+    <script src="node_modules/highcharts/highcharts.src.js"></script>
+
+
+    <script src="lib/rtl.js"></script>
+    <script src="Actions.js"></script>
+    <script src="Player.js"></script>
+    <script src="Pitch.js"></script>
+    <script src="World.js"></script>
+
+
+    <script>
+
+
+        $(document).ready(function () {
+
+
+
+
+            var chart = new Highcharts.Chart({
+                chart: {
+                    renderTo: $('#container')[0],
+                    animation:false
+                },
+
+                plotOptions: {
+                  "line": {
+                      animation:false,
+                      marker: {
+                          enabled : false
+                      },
+                      tooltip: {
+                          enabled : false
+                      }
+                  }
+                },
+
+                series: [{
+                    name: 'Average reward',
+                    type: 'line',
+                    data: [[0,0]]
+                }]
+            });
+
+
+
+            var world = new World(chart);
+            $("#target").click(function () {
+                console.log("CLIKC")
+                if (world.isRunning()) {
+                    $(this).text("Start");
+                    world.stop();
+                } else {
+                    $(this).text("Stop");
+                    world.start();
+                }
+            });
+
+
+            $( "#slider" ).slider({
+                value:1,
+                min: 0,
+                max: 1,
+                step:0.05,
+                slide: function( event, ui ) {
+                    world.getAgent().epsilon = ui.value;
+                    $("#epsilon").html(ui.value.toFixed(2));
+                }
+            });
+
+
+
+
+        });
+
+    </script>
+
+</head>
+<body>
+    <button id="target">Start</button>
+    <div id="epsilon"></div>
+    <div id="slider" style="width: 300px;height:20px"></div>
+
+
+    <div id="container" style="width: 1024px;height:600px;"></div>
+
+
+</body>
+</html>
