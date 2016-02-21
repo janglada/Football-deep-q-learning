@@ -46,7 +46,13 @@ Player.prototype = {
         var x = 10, y = 40;
         var dx = x-this.x;
         var dy = y-this.y;
-        return 100/Math.sqrt(dx*dx + dy*dy);
+        return 100/(dx*dx + dy*dy);
+    },
+
+    distanceTo: function(other_player) {
+        var dx = other_player.getX()-this.x;
+        var dy = other_player.getY()-this.y;
+        return 10/(dx*dx + dy*dy);
     },
 
     performAction: function() {

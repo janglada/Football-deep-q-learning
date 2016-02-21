@@ -12,20 +12,21 @@
 
 
     <script src="node_modules/highcharts/highcharts.src.js"></script>
-
+<!--
 
     <script src="lib/rtl.js"></script>
     <script src="Actions.js"></script>
     <script src="Player.js"></script>
     <script src="Pitch.js"></script>
     <script src="World.js"></script>
-
+-->
 
     <script>
 
 
         $(document).ready(function () {
 
+            var worldWorker = new Worker("World.js");
 
 
 
@@ -56,16 +57,21 @@
 
 
 
-            var world = new World(chart);
+
+            var isRunning =  false;
             $("#target").click(function () {
                 console.log("CLIKC")
-                if (world.isRunning()) {
+                if (isRunning) {
                     $(this).text("Start");
-                    world.stop();
+                    worldWorker.postMessage(["stop"]);
+                    console.log("ME")
+                   // world.stop();
                 } else {
                     $(this).text("Stop");
-                    world.start();
+                    //world.start();
+                    worldWorker.postMessage(["start"])
                 }
+                isRunning = !isRunning
             });
 
 
@@ -75,11 +81,18 @@
                 max: 1,
                 step:0.05,
                 slide: function( event, ui ) {
-                    world.getAgent().epsilon = ui.value;
+                    worldWorker.postMessage(["epsilon", ui.value]);
+                    //world.getAgent().epsilon = ui.value;
                     $("#epsilon").html(ui.value.toFixed(2));
                 }
             });
+            worldWorker.onmessage = function(ev) {
 
+                chart.series[0].addPoint(ev.data, false, false);
+                chart.redraw();
+                //result.textContent = e.data;
+               // console.log('Message received from worker', arguments);
+            };
 
 
 

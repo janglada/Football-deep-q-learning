@@ -2,6 +2,9 @@
  * Created by joan on 2/20/16.
  */
 
+
+self.importScripts("lib/rtl.js", "Actions.js", "Player.js", "Pitch.js");
+
 function World(chart) {
 
     this.sid = -1;
@@ -36,9 +39,7 @@ World.prototype = {
 
     start: function() {
         this.sid = setInterval(this._run.bind(this), 0);
-        this.chart_sid = setInterval(function() {
-            this.chart.redraw();
-        }.bind(this), 1000)
+
         this.running = true;
     },
     stop: function() {
@@ -60,6 +61,7 @@ World.prototype = {
 
             var action = this.agent.act(state); // state is an array of length 5
             actionFreq[action]++;
+            //console.log("ACTION" , Actions.label[action])
             if (action == Actions.SHOOT) {
                 if (this.env.getState()[4] == 1)
                     shooter_is_forward++;
@@ -77,12 +79,12 @@ World.prototype = {
         }
 
 
-
+        postMessage([this.step, avg_reward/this.numSteps]);
            // console.log(this.env.getState())
-        this.chart.series[0].addPoint([this.step, avg_reward/this.numSteps], false, false);
+        //this.chart.series[0].addPoint([this.step, avg_reward/this.numSteps], false, false);
 
 
-        console.log("actionFreq", shooter_is_forward/actionFreq[Actions.SHOOT]);
+        //console.log("actionFreq", shooter_is_forward/actionFreq[Actions.SHOOT]);
        // console.log( "avg", avg_reward/this.numSteps);
     },
 
@@ -90,3 +92,24 @@ World.prototype = {
         return this.running;
     }
 }
+
+var world = new World();
+
+
+self.onmessage = function(e) {
+
+    switch (e.data[0]) {
+        case "start":
+            world.start();
+            break;
+        case "stop":
+            world.stop();
+            break;
+        case "epsilon":
+
+            world.getAgent().epsilon = e.data[1];
+            break;
+    }
+
+}
+

@@ -63,14 +63,18 @@ Pitch.prototype = {
 
 
         // calculate reward
-        switch (action) {
+        switch (action)
+        {
             case Actions.PASS_0:
             case Actions.PASS_1:
             case Actions.PASS_2:
             case Actions.PASS_3:
             case Actions.PASS_4:
+
+                var player_w_ball_idx = this.state.indexOf(1);
                 if (this.state[action] == 0) {
-                    reward += 0.001;
+                    reward += this.players[action].distanceTo(this.players[player_w_ball_idx]);
+                    //console.log("PASS REWARD", reward)
                     this.state[0] = 0;
                     this.state[1] = 0;
                     this.state[2] = 0;
@@ -79,13 +83,63 @@ Pitch.prototype = {
 
                     this.state[action] = 1;
 
+                } else {
+                    reward = -10;
                 }
                 break;
+            /*
+            case PLAYER0_FORWARD  :
+                break;
+            case PLAYER1_FORWARD  :
+                break;
+            case PLAYER2_FORWARD  :
+                break;
+            case PLAYER3_FORWARD  :
+                break;
+            case PLAYER4_FORWARD  :
 
+                break;
+            case PLAYER0_BACKWARD  :
+                break;
+            case PLAYER1_BACKWARD  :
+                break;
+            case PLAYER2_BACKWARD  :
+                break;
+            case PLAYER3_BACKWARD  :
+                break;
+            case PLAYER4_BACKWARD  :
+
+                break;
+            case PLAYER0_LEFT  :
+                break;
+            case PLAYER1_LEFT  :
+                break;
+            case PLAYER2_LEFT  :
+                break;
+            case PLAYER3_LEFT  :
+                break;
+            case PLAYER4_LEFT  :
+
+
+                break;
+            case PLAYER0_RIGHT  :
+                break;
+            case PLAYER1_RIGHT  :
+                break;
+            case PLAYER2_RIGHT  :
+                break;
+            case PLAYER3_RIGHT  :
+                break;
+            case PLAYER4_RIGHT  :
+
+                break;
+            */
             case Actions.SHOOT:
                 for(var i = 0; i < this.num_players; i++) {
                     if (this.state[i] == 1) {
                         reward += this.players[i].getReward();
+                        //console.log("SHOT REWARD", reward)
+
                     }
                     this.state[i] = (i == 0)? 1 : 0;
                 }
