@@ -12,11 +12,11 @@ function Pitch() {
     this.num_players = 5;
     this.players = [];
 
-    this.players.push(new Player(10, 0,  0));       // goal keeper
-    this.players.push(new Player(10, 5,  0.001));    // defense
-    this.players.push(new Player(5,  15, 0.01));    // left wing
-    this.players.push(new Player(15, 15, 0.01));    // right wing
-    this.players.push(new Player(10, 30, 2));       // forward
+    this.players.push(new Player(10, 0,  this.width, this.height));     // goal keeper
+    this.players.push(new Player(10, 5,  this.width, this.height));     // defense
+    this.players.push(new Player(5,  15, this.width, this.height));     // left wing
+    this.players.push(new Player(15, 15, this.width, this.height));     // right wing
+    this.players.push(new Player(10, 30, this.width, this.height));      // forward
 
     this.state = new Array(5);
 
@@ -55,6 +55,22 @@ Pitch.prototype = {
 
     /**
      *
+     * @returns {Array}
+     */
+    getPlayersAsJson: function() {
+        return this.players.map(function(player, idx) {
+            return {
+                x: player.getX(),
+                y: player.getY(),
+                ball: this.state[idx]
+
+            }
+        }, this);
+    },
+
+
+    /**
+     *
      */
     performAction: function(action)
     {
@@ -73,7 +89,8 @@ Pitch.prototype = {
 
                 var player_w_ball_idx = this.state.indexOf(1);
                 if (this.state[action] == 0) {
-                    reward += this.players[action].distanceTo(this.players[player_w_ball_idx]);
+                    reward += this.players[action].getPassReward(this.players[player_w_ball_idx], this.height/2);
+                    //console.log("pass reward", reward)
                     //console.log("PASS REWARD", reward)
                     this.state[0] = 0;
                     this.state[1] = 0;
@@ -137,7 +154,7 @@ Pitch.prototype = {
             case Actions.SHOOT:
                 for(var i = 0; i < this.num_players; i++) {
                     if (this.state[i] == 1) {
-                        reward += this.players[i].getReward();
+                        reward += this.players[i].getShootReward();
                         //console.log("SHOT REWARD", reward)
 
                     }

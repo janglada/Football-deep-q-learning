@@ -12,6 +12,8 @@
 
 
     <script src="node_modules/highcharts/highcharts.src.js"></script>
+
+    <script src="external/d3.min.js"></script>
 <!--
 
     <script src="lib/rtl.js"></script>
@@ -25,6 +27,51 @@
 
 
         $(document).ready(function () {
+
+            var pitch = d3.select('#pitch');
+            var svg = pitch.append("svg")
+                    .attr("width", "100%")
+                    .attr("height", "100%")
+                    .attr("viewBox", "0 0 20 40")
+
+            svg.append("rect")
+                    .attr("x", 0)
+                    .attr("y", 0)
+                    .attr("width", 20)
+                    .attr("height", 40)
+                    .style("fill", "transparent")
+                    .attr("stroke", "black")
+                    .attr("stroke-width", "0.2");
+            var players_svg = [
+                svg.append("circle")
+                        .attr("r", 0.5)
+                        .style("fill", "transparent")
+                        .style("stroke-width", ".1")
+                        .style("stroke", "black"),
+                svg.append("circle")
+                        .attr("r", 0.5)
+                        .style("fill", "transparent")
+                        .style("stroke-width", ".1")
+                        .style("stroke", "black"),
+                svg.append("circle")
+                        .attr("r", 0.5)
+                        .style("fill", "transparent")
+                        .style("stroke-width", ".1")
+                        .style("stroke", "black"),
+                svg.append("circle")
+                        .attr("r", 0.5)
+                        .style("fill", "transparent")
+                        .style("stroke-width", ".1")
+                        .style("stroke", "black"),
+                svg.append("circle")
+                        .attr("r", 0.5)
+                        .style("fill", "transparent")
+                        .style("stroke-width", ".1")
+                        .style("stroke", "black"),
+            ]
+
+
+
 
             var worldWorker = new Worker("World.js");
 
@@ -82,17 +129,30 @@
                 step:0.05,
                 slide: function( event, ui ) {
                     worldWorker.postMessage(["epsilon", ui.value]);
-                    //world.getAgent().epsilon = ui.value;
                     $("#epsilon").html(ui.value.toFixed(2));
                 }
             });
-            worldWorker.onmessage = function(ev) {
 
-                chart.series[0].addPoint(ev.data, false, false);
+            worldWorker.onmessage = function(ev) {
+                console.log("onmessage", arguments)
+                chart.series[0].addPoint(ev.data.slice(0,2), false, false);
                 chart.redraw();
+                var players = ev.data[2];
+
+                players.forEach(function(p, idx) {
+                    players_svg[idx].attr("cx", p.x);
+                    players_svg[idx].attr("cy", p.y);
+                    console.log( p.ball === 1)
+                    players_svg[idx].style("fill", p.ball === 1? "red" : "transparent");
+                });
+
+
+
+
                 //result.textContent = e.data;
                // console.log('Message received from worker', arguments);
             };
+
 
 
 
@@ -106,9 +166,10 @@
     <div id="epsilon"></div>
     <div id="slider" style="width: 300px;height:20px"></div>
 
-
-    <div id="container" style="width: 1024px;height:600px;"></div>
-
+    <div style="">
+        <div id="container" style="display:inline-block;width: 1024px;height:600px;"></div>
+        <div id="pitch" style="display:inline-block;width: 300px;height:600px;"></div>
+    </div>
 
 </body>
 </html>

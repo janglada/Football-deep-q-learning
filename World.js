@@ -16,7 +16,7 @@ function World(chart) {
     var spec = { alpha: 0.01 }; // see full options on DQN page
     spec.update = 'qlearn'; // qlearn | sarsa
     spec.gamma = 0.9; // discount factor, [0, 1)
-    spec.epsilon = 0.2; // initial epsilon for epsilon-greedy policy, [0, 1)
+    spec.epsilon = 1; // initial epsilon for epsilon-greedy policy, [0, 1)
     spec.alpha = 0.005; // value function learning rate
     spec.experience_add_every = 5; // number of time steps before we add another experience to replay memory
     spec.experience_size = 1000; // size of experience
@@ -28,7 +28,7 @@ function World(chart) {
     this.running = false;
     this.step = 0;
     this.chart =  chart;
-    this.numSteps = 250;
+    this.numSteps = 500;
 }
 
 World.prototype = {
@@ -61,7 +61,7 @@ World.prototype = {
 
             var action = this.agent.act(state); // state is an array of length 5
             actionFreq[action]++;
-            //console.log("ACTION" , Actions.label[action])
+           // console.log("ACTION" , Actions.label[action])
             if (action == Actions.SHOOT) {
                 if (this.env.getState()[4] == 1)
                     shooter_is_forward++;
@@ -78,18 +78,18 @@ World.prototype = {
             avg_reward += reward;
         }
 
-
-        postMessage([this.step, avg_reward/this.numSteps]);
-           // console.log(this.env.getState())
-        //this.chart.series[0].addPoint([this.step, avg_reward/this.numSteps], false, false);
+        postMessage([this.step, avg_reward/this.numSteps, this.env.getPlayersAsJson()]);
 
 
+        var a = "";
+        var total = this.numSteps;
+        actionFreq.forEach(function(fr, index) {
+            a += Actions.label[index] +" :" + (fr*100/total).toFixed(1) +"%    ";
+           //a[Actions.label[index]] =  fr
+        })
+        console.log(a)
         //console.log("actionFreq", shooter_is_forward/actionFreq[Actions.SHOOT]);
        // console.log( "avg", avg_reward/this.numSteps);
-    },
-
-    isRunning: function() {
-        return this.running;
     }
 }
 
@@ -97,7 +97,6 @@ var world = new World();
 
 
 self.onmessage = function(e) {
-
     switch (e.data[0]) {
         case "start":
             world.start();
@@ -110,6 +109,5 @@ self.onmessage = function(e) {
             world.getAgent().epsilon = e.data[1];
             break;
     }
-
 }
 
