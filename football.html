@@ -102,9 +102,6 @@
                 }]
             });
 
-
-
-
             var isRunning =  false;
             $("#target").click(function () {
                 console.log("CLIKC")
@@ -122,7 +119,7 @@
             });
 
 
-            $( "#slider" ).slider({
+            $( "#epsilon-slider" ).slider({
                 value:1,
                 min: 0,
                 max: 1,
@@ -133,8 +130,15 @@
                 }
             });
 
+            $( "#speed :radio" ).buttonset().click(function(e) {
+
+               // console.log($(this).attr("id"))
+                worldWorker.postMessage(["speed", $(this).attr("id")]);
+            });
+
+
             worldWorker.onmessage = function(ev) {
-                console.log("onmessage", arguments)
+               // console.log("onmessage", arguments)
                 chart.series[0].addPoint(ev.data.slice(0,2), false, false);
                 chart.redraw();
                 var players = ev.data[2];
@@ -142,7 +146,7 @@
                 players.forEach(function(p, idx) {
                     players_svg[idx].attr("cx", p.x);
                     players_svg[idx].attr("cy", p.y);
-                    console.log( p.ball === 1)
+                   // console.log( p.ball === 1)
                     players_svg[idx].style("fill", p.ball === 1? "red" : "transparent");
                 });
 
@@ -163,12 +167,18 @@
 </head>
 <body>
     <button id="target">Start</button>
-    <div id="epsilon"></div>
-    <div id="slider" style="width: 300px;height:20px"></div>
-
+    <div />
+    <label>Epsilon</label><div id="epsilon">&nbsp;</div>
+    <div id="epsilon-slider" style="width: 300px;height:20px"></div>
+    <div />
+    <span id="speed">
+        <input type="radio" id="slow" name="repeat" checked="checked"><label for="slow">Slow</label>
+        <input type="radio" id="normal" name="repeat"><label for="normal">Normal</label>
+        <input type="radio" id="fast" name="repeat" checked><label for="fast">Fast</label>
+    </span>
     <div style="">
-        <div id="container" style="display:inline-block;width: 1024px;height:600px;"></div>
-        <div id="pitch" style="display:inline-block;width: 300px;height:600px;"></div>
+        <div id="container" style="display:inline-block;width: 800px;height:450px;"></div>
+        <div id="pitch" style="display:inline-block;width: 200px;height:400px;"></div>
     </div>
 
 </body>

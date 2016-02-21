@@ -5,10 +5,9 @@
 
 self.importScripts("lib/rtl.js", "Actions.js", "Player.js", "Pitch.js");
 
-function World(chart) {
+function World() {
 
     this.sid = -1;
-    this.chart_sid = -1;
     this.env =  new Pitch();
 
 
@@ -27,34 +26,47 @@ function World(chart) {
 
     this.running = false;
     this.step = 0;
-    this.chart =  chart;
     this.numSteps = 500;
+    this.delay = 0;
 }
 
 World.prototype = {
+
+    setFast: function() {
+        this.numSteps = 1000;
+        this.delay = 0;
+    },
+    setSlow: function() {
+        this.numSteps = 1;
+        this.delay = 500;
+    },
+
+    setNormal: function() {
+        this.numSteps = 100;
+        this.delay = 500;
+    },
 
     getAgent: function() {
       return this.agent;
     },
 
     start: function() {
-        this.sid = setInterval(this._run.bind(this), 0);
+        this.sid = setInterval(this._run.bind(this), this.delay);
 
         this.running = true;
     },
+
     stop: function() {
         clearInterval(this.sid);
-        clearInterval(this.chart_sid);
         this.running = false;
     },
 
     _run: function() {
-        //console.log(this)
+
         var avg_reward = 0;
         var actionFreq = [0,0,0,0,0,0];
         var shooter_is_forward = 0;
-        //var steps_before_goal = 0;
-       // var avg_steps_before_goal = 0;
+
         for (var j = 0; j < this.numSteps; j++) {
 
             var state = this.env.getState();
@@ -107,6 +119,23 @@ self.onmessage = function(e) {
         case "epsilon":
 
             world.getAgent().epsilon = e.data[1];
+            break;
+        case "speed":
+            var speed =  e.data[1];
+            world.stop();
+            switch (speed) {
+                case "slow":
+
+                    world.setSlow();
+                    break;
+                case "normal":
+                    world.setNormal();
+                    break;
+                case "fast":
+                    world.setFast();
+                    break;
+            }
+            world.start();
             break;
     }
 }
