@@ -2,184 +2,202 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title></title>
+    <title>Football Deep Q-Learning</title>
 
     <link rel="stylesheet" type="text/css" href="node_modules/jquery-ui-browserify/themes/base/jquery.ui.all.css">
 
     <script src="node_modules/jquery/dist/jquery.min.js"></script>
-
     <script src="node_modules/jquery-ui-browserify/dist/jquery-ui.min.js"></script>
-
-
     <script src="node_modules/highcharts/highcharts.src.js"></script>
-
     <script src="external/d3.min.js"></script>
-<!--
 
-    <script src="lib/rtl.js"></script>
-    <script src="Actions.js"></script>
-    <script src="Player.js"></script>
-    <script src="Pitch.js"></script>
-    <script src="World.js"></script>
--->
+    <style>
+        body { font-family: sans-serif; padding: 10px; }
+        .stat-label { font-size: 12px; color: #555; margin-right: 6px; }
+        .stat-value { font-weight: bold; margin-right: 20px; }
+        #stats { margin: 8px 0; }
+        #controls { margin: 8px 0; }
+        #save-btn, #load-btn { margin-left: 10px; }
+        #error-msg { color: red; font-size: 12px; margin-top: 4px; display: none; }
+    </style>
 
     <script>
+        $(document).ready(function() {
 
-
-        $(document).ready(function () {
-
+            // --- Pitch visualisation (D3) ---
             var pitch = d3.select('#pitch');
             var svg = pitch.append("svg")
-                    .attr("width", "100%")
-                    .attr("height", "100%")
-                    .attr("viewBox", "0 0 20 40")
+                .attr("width", "100%")
+                .attr("height", "100%")
+                .attr("viewBox", "0 0 20 40");
 
             svg.append("rect")
-                    .attr("x", 0)
-                    .attr("y", 0)
-                    .attr("width", 20)
-                    .attr("height", 40)
+                .attr("x", 0).attr("y", 0)
+                .attr("width", 20).attr("height", 40)
+                .style("fill", "transparent")
+                .attr("stroke", "black")
+                .attr("stroke-width", "0.2");
+
+            var roleColors = ["#4444ff", "#44aa44", "#aa4444", "#aa4444", "#ff8800"];
+            var players_svg = [0, 1, 2, 3, 4].map(function(i) {
+                return svg.append("circle")
+                    .attr("r", 0.5)
                     .style("fill", "transparent")
-                    .attr("stroke", "black")
-                    .attr("stroke-width", "0.2");
-            var players_svg = [
-                svg.append("circle")
-                        .attr("r", 0.5)
-                        .style("fill", "transparent")
-                        .style("stroke-width", ".1")
-                        .style("stroke", "black"),
-                svg.append("circle")
-                        .attr("r", 0.5)
-                        .style("fill", "transparent")
-                        .style("stroke-width", ".1")
-                        .style("stroke", "black"),
-                svg.append("circle")
-                        .attr("r", 0.5)
-                        .style("fill", "transparent")
-                        .style("stroke-width", ".1")
-                        .style("stroke", "black"),
-                svg.append("circle")
-                        .attr("r", 0.5)
-                        .style("fill", "transparent")
-                        .style("stroke-width", ".1")
-                        .style("stroke", "black"),
-                svg.append("circle")
-                        .attr("r", 0.5)
-                        .style("fill", "transparent")
-                        .style("stroke-width", ".1")
-                        .style("stroke", "black"),
-            ]
+                    .style("stroke-width", ".1")
+                    .style("stroke", roleColors[i]);
+            });
 
-
-
-
+            // --- Web Worker ---
             var worldWorker = new Worker("World.js");
 
+            worldWorker.onerror = function(e) {
+                $("#error-msg").text("Worker error: " + e.message).show();
+                console.error("Worker error:", e);
+            };
 
+            worldWorker.onmessage = function(ev) {
+                // handle save response
+                if (ev.data && ev.data.type === 'model') {
+                    try {
+                        localStorage.setItem('dqn_model', JSON.stringify(ev.data.data));
+                        alert('Model saved to local storage.');
+                    } catch(e) {
+                        alert('Save failed: ' + e.message);
+                    }
+                    return;
+                }
 
+                // training update: [step, avg_reward, players, tderror, epsilon]
+                if (!Array.isArray(ev.data) || ev.data.length < 3) return;
+
+                chart.series[0].addPoint(ev.data.slice(0, 2), false, false);
+                chart.redraw();
+
+                var players = ev.data[2];
+                if (!players || players.length !== 5) return;
+                players.forEach(function(p, idx) {
+                    players_svg[idx].attr("cx", p.x).attr("cy", p.y);
+                    players_svg[idx].style("fill", p.ball === 1 ? "red" : "transparent");
+                });
+
+                // update stats
+                $("#step-count").text(ev.data[0]);
+                if (ev.data[3] !== undefined) {
+                    $("#tderror").text(Math.abs(ev.data[3]).toFixed(4));
+                }
+                if (ev.data[4] !== undefined) {
+                    var eps = ev.data[4];
+                    $("#epsilon").text(eps.toFixed(3));
+                    // keep slider in sync with agent's decayed epsilon
+                    if (Math.abs($("#epsilon-slider").slider("value") - eps) > 0.001) {
+                        $("#epsilon-slider").slider("value", eps);
+                    }
+                }
+            };
+
+            // --- Reward chart (Highcharts) ---
             var chart = new Highcharts.Chart({
                 chart: {
                     renderTo: $('#container')[0],
-                    animation:false
+                    animation: false
                 },
-
+                title: { text: 'Average Reward per Iteration' },
+                xAxis: { title: { text: 'Steps' } },
+                yAxis: { title: { text: 'Avg Reward' } },
                 plotOptions: {
-                  "line": {
-                      animation:false,
-                      marker: {
-                          enabled : false
-                      },
-                      tooltip: {
-                          enabled : false
-                      }
-                  }
+                    line: {
+                        animation: false,
+                        marker: { enabled: false },
+                        tooltip: { enabled: false }
+                    }
                 },
-
                 series: [{
                     name: 'Average reward',
                     type: 'line',
-                    data: [[0,0]]
+                    data: [[0, 0]]
                 }]
             });
 
-            var isRunning =  false;
-            $("#target").click(function () {
-                console.log("CLIKC")
+            // --- Start / Stop ---
+            var isRunning = false;
+            $("#target").click(function() {
                 if (isRunning) {
                     $(this).text("Start");
                     worldWorker.postMessage(["stop"]);
-                    console.log("ME")
-                   // world.stop();
                 } else {
                     $(this).text("Stop");
-                    //world.start();
-                    worldWorker.postMessage(["start"])
+                    worldWorker.postMessage(["start"]);
                 }
-                isRunning = !isRunning
+                isRunning = !isRunning;
             });
 
-
-            $( "#epsilon-slider" ).slider({
-                value:1,
+            // --- Epsilon slider ---
+            $("#epsilon-slider").slider({
+                value: 1,
                 min: 0,
                 max: 1,
-                step:0.05,
-                slide: function( event, ui ) {
+                step: 0.05,
+                slide: function(event, ui) {
                     worldWorker.postMessage(["epsilon", ui.value]);
-                    $("#epsilon").html(ui.value.toFixed(2));
+                    $("#epsilon").text(ui.value.toFixed(3));
                 }
             });
+            $("#epsilon").text("1.000");
 
-            $( "#speed :radio" ).buttonset().click(function(e) {
-
-               // console.log($(this).attr("id"))
+            // --- Speed controls ---
+            $("#speed :radio").buttonset().click(function() {
                 worldWorker.postMessage(["speed", $(this).attr("id")]);
             });
 
+            // --- Save / Load ---
+            $("#save-btn").click(function() {
+                worldWorker.postMessage(["save"]);
+            });
 
-            worldWorker.onmessage = function(ev) {
-               // console.log("onmessage", arguments)
-                chart.series[0].addPoint(ev.data.slice(0,2), false, false);
-                chart.redraw();
-                var players = ev.data[2];
-
-                players.forEach(function(p, idx) {
-                    players_svg[idx].attr("cx", p.x);
-                    players_svg[idx].attr("cy", p.y);
-                   // console.log( p.ball === 1)
-                    players_svg[idx].style("fill", p.ball === 1? "red" : "transparent");
-                });
-
-
-
-
-                //result.textContent = e.data;
-               // console.log('Message received from worker', arguments);
-            };
-
-
-
-
+            $("#load-btn").click(function() {
+                var saved = localStorage.getItem('dqn_model');
+                if (!saved) { alert('No saved model found in local storage.'); return; }
+                try {
+                    worldWorker.postMessage(["load", JSON.parse(saved)]);
+                    alert('Model loaded.');
+                } catch(e) {
+                    alert('Load failed: ' + e.message);
+                }
+            });
         });
-
     </script>
-
 </head>
 <body>
-    <button id="target">Start</button>
-    <div />
-    <label>Epsilon</label><div id="epsilon">&nbsp;</div>
-    <div id="epsilon-slider" style="width: 300px;height:20px"></div>
-    <div />
-    <span id="speed">
-        <input type="radio" id="slow" name="repeat" checked="checked"><label for="slow">Slow</label>
-        <input type="radio" id="normal" name="repeat"><label for="normal">Normal</label>
-        <input type="radio" id="fast" name="repeat" checked><label for="fast">Fast</label>
-    </span>
-    <div style="">
-        <div id="container" style="display:inline-block;width: 800px;height:450px;"></div>
-        <div id="pitch" style="display:inline-block;width: 200px;height:400px;"></div>
+    <div id="controls">
+        <button id="target">Start</button>
+        <button id="save-btn">Save Model</button>
+        <button id="load-btn">Load Model</button>
     </div>
 
+    <div id="stats">
+        <span class="stat-label">Steps:</span><span class="stat-value" id="step-count">0</span>
+        <span class="stat-label">Epsilon:</span><span class="stat-value" id="epsilon">1.000</span>
+        <span class="stat-label">TD Error:</span><span class="stat-value" id="tderror">-</span>
+    </div>
+
+    <div>
+        <label>Epsilon override:</label>
+        <div id="epsilon-slider" style="width:300px;height:20px;display:inline-block;margin-left:8px;"></div>
+    </div>
+
+    <div id="error-msg"></div>
+
+    <div>
+        <span id="speed">
+            <input type="radio" id="slow" name="repeat"><label for="slow">Slow</label>
+            <input type="radio" id="normal" name="repeat" checked="checked"><label for="normal">Normal</label>
+            <input type="radio" id="fast" name="repeat"><label for="fast">Fast</label>
+        </span>
+    </div>
+
+    <div style="margin-top:10px;">
+        <div id="container" style="display:inline-block;width:800px;height:450px;"></div>
+        <div id="pitch"     style="display:inline-block;width:200px;height:400px;"></div>
+    </div>
 </body>
 </html>
