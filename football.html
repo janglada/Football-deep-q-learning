@@ -4,11 +4,7 @@
     <meta charset="UTF-8">
     <title>Football Deep Q-Learning</title>
 
-    <link rel="stylesheet" type="text/css" href="node_modules/jquery-ui-browserify/themes/base/jquery.ui.all.css">
-
-    <script src="node_modules/jquery/dist/jquery.min.js"></script>
-    <script src="node_modules/jquery-ui-browserify/dist/jquery-ui.min.js"></script>
-    <script src="node_modules/highcharts/highcharts.src.js"></script>
+    <script src="https://code.highcharts.com/highcharts.js"></script>
     <script src="external/d3.min.js"></script>
 
     <style>
@@ -22,7 +18,7 @@
     </style>
 
     <script>
-        $(document).ready(function() {
+        document.addEventListener('DOMContentLoaded', function() {
 
             // --- Pitch visualisation (D3) ---
             var pitch = d3.select('#pitch');
@@ -50,10 +46,15 @@
             // --- Web Worker ---
             var worldWorker = new Worker("World.js");
 
+            var errorMsg = document.getElementById('error-msg');
             worldWorker.onerror = function(e) {
-                $("#error-msg").text("Worker error: " + e.message).show();
+                errorMsg.textContent = "Worker error: " + e.message;
+                errorMsg.style.display = 'block';
                 console.error("Worker error:", e);
             };
+
+            var epsilonSlider = document.getElementById('epsilon-slider');
+            var epsilonDisplay = document.getElementById('epsilon');
 
             worldWorker.onmessage = function(ev) {
                 // handle save response
@@ -81,16 +82,16 @@
                 });
 
                 // update stats
-                $("#step-count").text(ev.data[0]);
+                document.getElementById("step-count").textContent = ev.data[0];
                 if (ev.data[3] !== undefined) {
-                    $("#tderror").text(Math.abs(ev.data[3]).toFixed(4));
+                    document.getElementById("tderror").textContent = Math.abs(ev.data[3]).toFixed(4);
                 }
                 if (ev.data[4] !== undefined) {
                     var eps = ev.data[4];
-                    $("#epsilon").text(eps.toFixed(3));
+                    epsilonDisplay.textContent = eps.toFixed(3);
                     // keep slider in sync with agent's decayed epsilon
-                    if (Math.abs($("#epsilon-slider").slider("value") - eps) > 0.001) {
-                        $("#epsilon-slider").slider("value", eps);
+                    if (Math.abs(parseFloat(epsilonSlider.value) - eps) > 0.001) {
+                        epsilonSlider.value = eps;
                     }
                 }
             };
@@ -98,7 +99,7 @@
             // --- Reward chart (Highcharts) ---
             var chart = new Highcharts.Chart({
                 chart: {
-                    renderTo: $('#container')[0],
+                    renderTo: document.getElementById('container'),
                     animation: false
                 },
                 title: { text: 'Average Reward per Iteration' },
@@ -120,41 +121,38 @@
 
             // --- Start / Stop ---
             var isRunning = false;
-            $("#target").click(function() {
+            document.getElementById('target').addEventListener('click', function() {
                 if (isRunning) {
-                    $(this).text("Start");
+                    this.textContent = "Start";
                     worldWorker.postMessage(["stop"]);
                 } else {
-                    $(this).text("Stop");
+                    this.textContent = "Stop";
                     worldWorker.postMessage(["start"]);
                 }
                 isRunning = !isRunning;
             });
 
             // --- Epsilon slider ---
-            $("#epsilon-slider").slider({
-                value: 1,
-                min: 0,
-                max: 1,
-                step: 0.05,
-                slide: function(event, ui) {
-                    worldWorker.postMessage(["epsilon", ui.value]);
-                    $("#epsilon").text(ui.value.toFixed(3));
-                }
+            epsilonSlider.addEventListener('input', function() {
+                var val = parseFloat(this.value);
+                worldWorker.postMessage(["epsilon", val]);
+                epsilonDisplay.textContent = val.toFixed(3);
             });
-            $("#epsilon").text("1.000");
+            epsilonDisplay.textContent = "1.000";
 
             // --- Speed controls ---
-            $("#speed :radio").buttonset().click(function() {
-                worldWorker.postMessage(["speed", $(this).attr("id")]);
+            document.querySelectorAll('#speed input[type="radio"]').forEach(function(radio) {
+                radio.addEventListener('change', function() {
+                    worldWorker.postMessage(["speed", this.id]);
+                });
             });
 
             // --- Save / Load ---
-            $("#save-btn").click(function() {
+            document.getElementById('save-btn').addEventListener('click', function() {
                 worldWorker.postMessage(["save"]);
             });
 
-            $("#load-btn").click(function() {
+            document.getElementById('load-btn').addEventListener('click', function() {
                 var saved = localStorage.getItem('dqn_model');
                 if (!saved) { alert('No saved model found in local storage.'); return; }
                 try {
@@ -182,7 +180,7 @@
 
     <div>
         <label>Epsilon override:</label>
-        <div id="epsilon-slider" style="width:300px;height:20px;display:inline-block;margin-left:8px;"></div>
+        <input type="range" id="epsilon-slider" min="0" max="1" step="0.05" value="1" style="width:300px;margin-left:8px;">
     </div>
 
     <div id="error-msg"></div>
