@@ -4,9 +4,13 @@
 
 self.importScripts("lib/rtl.js", "Actions.js", "Player.js", "Pitch.js");
 
+// MessageChannel-based self-scheduler: avoids the browser's >=4ms setInterval floor.
+// Signalling port2 wakes port1 immediately (microtask-level priority, no timer clamping),
+// enabling maximum training throughput in fast mode.
+var scheduler = new MessageChannel();
+
 function World() {
 
-    this.sid = -1;
     this.env = new Pitch();
 
     // create the DQN agent
@@ -30,6 +34,7 @@ function World() {
     this.step = 0;
     this.numSteps = 500;
     this.delay = 0;
+    this._runCount = 0;
 }
 
 World.prototype = {
@@ -52,40 +57,61 @@ World.prototype = {
     },
 
     start: function() {
-        this.sid = setInterval(this._run.bind(this), this.delay);
         this.running = true;
+        this._schedule();
     },
 
     stop: function() {
-        clearInterval(this.sid);
         this.running = false;
     },
 
-    _run: function() {
-        var avg_reward = 0;
-        var actionFreq = [0, 0, 0, 0, 0, 0];
+    _schedule: function() {
+        if (!this.running) return;
+        if (this.delay === 0) {
+            // Immediate tick via MessageChannel — no >=4ms timer floor
+            scheduler.port2.postMessage(null);
+        } else {
+            var self = this;
+            setTimeout(function() { scheduler.port2.postMessage(null); }, self.delay);
+        }
+    },
 
+    _run: function() {
+        if (!this.running) return;
+
+        var avg_reward = 0;
         for (var j = 0; j < this.numSteps; j++) {
             var state = this.env.getState();
             var action = this.agent.act(state);
-            actionFreq[action]++;
             var reward = this.env.performAction(action);
             this.agent.learn(reward);
             this.step++;
             avg_reward += reward;
         }
 
-        postMessage([
-            this.step,
-            avg_reward / this.numSteps,
-            this.env.getPlayersAsJson(),
-            this.agent.tderror,
-            this.agent.epsilon
-        ]);
+        // In fast mode (delay=0) only post every 10 runs to reduce serialization
+        // overhead. In slow/normal modes post every run for responsive UI updates.
+        this._runCount++;
+        if (this.delay > 0 || this._runCount % 10 === 0) {
+            postMessage([
+                this.step,
+                avg_reward / this.numSteps,
+                this.env.getPlayersAsJson(),
+                this.agent.tderror,
+                this.agent.epsilon
+            ]);
+        }
+
+        this._schedule();
     }
 };
 
 var world = new World();
+
+// Drive the training loop from the private scheduler port
+scheduler.port1.onmessage = function() {
+    world._run();
+};
 
 self.onmessage = function(e) {
     switch (e.data[0]) {
@@ -110,6 +136,10 @@ self.onmessage = function(e) {
             break;
         case "save":
             postMessage({ type: 'model', data: world.getAgent().toJSON() });
+            break;
+        case "sync":
+            // Internal: returns weights for population sync (not saved to localStorage)
+            postMessage({ type: 'sync_model', data: world.getAgent().toJSON() });
             break;
         case "load":
             world.getAgent().fromJSON(e.data[1]);

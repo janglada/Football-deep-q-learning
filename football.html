@@ -43,58 +43,27 @@
                     .style("stroke", roleColors[i]);
             });
 
-            // --- Web Worker ---
-            var worldWorker = new Worker("World.js");
+            // --- Parallel Web Workers ---
+            // Use one worker per logical CPU core (minus one for the main thread), capped at 4.
+            // Each worker trains an independent DQN agent. Every SYNC_INTERVAL messages the
+            // best-performing agent's weights are broadcast to all others (population sync).
+            var N_WORKERS = navigator.hardwareConcurrency
+                ? Math.min(navigator.hardwareConcurrency - 1, 4)
+                : 4;
+            N_WORKERS = Math.max(N_WORKERS, 1);
+
+            var SYNC_INTERVAL = 50; // messages across all workers between population syncs
+
+            var workers = [];
+            var workerRecentReward = [];
+            var syncPending = false;
+            var totalMsgCount = 0;
 
             var errorMsg = document.getElementById('error-msg');
-            worldWorker.onerror = function(e) {
-                errorMsg.textContent = "Worker error: " + e.message;
-                errorMsg.style.display = 'block';
-                console.error("Worker error:", e);
-            };
-
             var epsilonSlider = document.getElementById('epsilon-slider');
             var epsilonDisplay = document.getElementById('epsilon');
 
-            worldWorker.onmessage = function(ev) {
-                // handle save response
-                if (ev.data && ev.data.type === 'model') {
-                    try {
-                        localStorage.setItem('dqn_model', JSON.stringify(ev.data.data));
-                        alert('Model saved to local storage.');
-                    } catch(e) {
-                        alert('Save failed: ' + e.message);
-                    }
-                    return;
-                }
-
-                // training update: [step, avg_reward, players, tderror, epsilon]
-                if (!Array.isArray(ev.data) || ev.data.length < 3) return;
-
-                chart.series[0].addPoint(ev.data.slice(0, 2), false, false);
-                chart.redraw();
-
-                var players = ev.data[2];
-                if (!players || players.length !== 5) return;
-                players.forEach(function(p, idx) {
-                    players_svg[idx].attr("cx", p.x).attr("cy", p.y);
-                    players_svg[idx].style("fill", p.ball === 1 ? "red" : "transparent");
-                });
-
-                // update stats
-                document.getElementById("step-count").textContent = ev.data[0];
-                if (ev.data[3] !== undefined) {
-                    document.getElementById("tderror").textContent = Math.abs(ev.data[3]).toFixed(4);
-                }
-                if (ev.data[4] !== undefined) {
-                    var eps = ev.data[4];
-                    epsilonDisplay.textContent = eps.toFixed(3);
-                    // keep slider in sync with agent's decayed epsilon
-                    if (Math.abs(parseFloat(epsilonSlider.value) - eps) > 0.001) {
-                        epsilonSlider.value = eps;
-                    }
-                }
-            };
+            document.getElementById('worker-count').textContent = N_WORKERS;
 
             // --- Reward chart (Highcharts) ---
             var chart = new Highcharts.Chart({
@@ -102,7 +71,7 @@
                     renderTo: document.getElementById('container'),
                     animation: false
                 },
-                title: { text: 'Average Reward per Iteration' },
+                title: { text: 'Average Reward per Iteration (worker 0)' },
                 xAxis: { title: { text: 'Steps' } },
                 yAxis: { title: { text: 'Avg Reward' } },
                 plotOptions: {
@@ -119,15 +88,97 @@
                 }]
             });
 
+            for (var i = 0; i < N_WORKERS; i++) {
+                workerRecentReward.push(-Infinity);
+                (function(idx) {
+                    var w = new Worker('World.js');
+
+                    w.onerror = function(e) {
+                        errorMsg.textContent = 'Worker ' + idx + ' error: ' + e.message;
+                        errorMsg.style.display = 'block';
+                        console.error('Worker ' + idx + ' error:', e);
+                    };
+
+                    w.onmessage = function(ev) {
+                        // Population sync response: distribute to all other workers
+                        if (ev.data && ev.data.type === 'sync_model') {
+                            workers.forEach(function(other, j) {
+                                if (j !== idx) other.postMessage(['load', ev.data.data]);
+                            });
+                            syncPending = false;
+                            return;
+                        }
+
+                        // User-initiated save response
+                        if (ev.data && ev.data.type === 'model') {
+                            try {
+                                localStorage.setItem('dqn_model', JSON.stringify(ev.data.data));
+                                alert('Model saved to local storage.');
+                            } catch(e) {
+                                alert('Save failed: ' + e.message);
+                            }
+                            return;
+                        }
+
+                        if (!Array.isArray(ev.data) || ev.data.length < 3) return;
+
+                        workerRecentReward[idx] = ev.data[1];
+
+                        // Population sync: find best worker and broadcast its weights
+                        totalMsgCount++;
+                        if (!syncPending && totalMsgCount % SYNC_INTERVAL === 0) {
+                            var bestIdx = 0;
+                            for (var k = 1; k < N_WORKERS; k++) {
+                                if (workerRecentReward[k] > workerRecentReward[bestIdx]) bestIdx = k;
+                            }
+                            syncPending = true;
+                            workers[bestIdx].postMessage(['sync']);
+                        }
+
+                        // UI updates driven by worker 0 only
+                        if (idx !== 0) return;
+
+                        chart.series[0].addPoint(ev.data.slice(0, 2), false, false);
+                        chart.redraw();
+
+                        var players = ev.data[2];
+                        if (players && players.length === 5) {
+                            players.forEach(function(p, pidx) {
+                                players_svg[pidx].attr("cx", p.x).attr("cy", p.y);
+                                players_svg[pidx].style("fill", p.ball === 1 ? "red" : "transparent");
+                            });
+                        }
+
+                        document.getElementById("step-count").textContent = ev.data[0];
+                        if (ev.data[3] !== undefined) {
+                            document.getElementById("tderror").textContent = Math.abs(ev.data[3]).toFixed(4);
+                        }
+                        if (ev.data[4] !== undefined) {
+                            var eps = ev.data[4];
+                            epsilonDisplay.textContent = eps.toFixed(3);
+                            if (Math.abs(parseFloat(epsilonSlider.value) - eps) > 0.001) {
+                                epsilonSlider.value = eps;
+                            }
+                        }
+                    };
+
+                    workers.push(w);
+                })(i);
+            }
+
+            function broadcast(msg) {
+                workers.forEach(function(w) { w.postMessage(msg); });
+            }
+
             // --- Start / Stop ---
             var isRunning = false;
             document.getElementById('target').addEventListener('click', function() {
                 if (isRunning) {
                     this.textContent = "Start";
-                    worldWorker.postMessage(["stop"]);
+                    broadcast(["stop"]);
                 } else {
                     this.textContent = "Stop";
-                    worldWorker.postMessage(["start"]);
+                    broadcast(["start"]);
                 }
                 isRunning = !isRunning;
             });
@@ -135,7 +186,7 @@
             // --- Epsilon slider ---
             epsilonSlider.addEventListener('input', function() {
                 var val = parseFloat(this.value);
-                worldWorker.postMessage(["epsilon", val]);
+                broadcast(["epsilon", val]);
                 epsilonDisplay.textContent = val.toFixed(3);
             });
             epsilonDisplay.textContent = "1.000";
@@ -143,20 +194,21 @@
             // --- Speed controls ---
             document.querySelectorAll('#speed input[type="radio"]').forEach(function(radio) {
                 radio.addEventListener('change', function() {
-                    worldWorker.postMessage(["speed", this.id]);
+                    broadcast(["speed", this.id]);
                 });
             });
 
             // --- Save / Load ---
+            // Save: only request from worker 0 to avoid N simultaneous alerts
             document.getElementById('save-btn').addEventListener('click', function() {
-                worldWorker.postMessage(["save"]);
+                workers[0].postMessage(["save"]);
             });
 
             document.getElementById('load-btn').addEventListener('click', function() {
                 var saved = localStorage.getItem('dqn_model');
                 if (!saved) { alert('No saved model found in local storage.'); return; }
                 try {
-                    worldWorker.postMessage(["load", JSON.parse(saved)]);
+                    broadcast(["load", JSON.parse(saved)]);
                     alert('Model loaded.');
                 } catch(e) {
                     alert('Load failed: ' + e.message);
@@ -173,6 +225,7 @@
     </div>
 
     <div id="stats">
+        <span class="stat-label">Workers:</span><span class="stat-value" id="worker-count">-</span>
         <span class="stat-label">Steps:</span><span class="stat-value" id="step-count">0</span>
         <span class="stat-label">Epsilon:</span><span class="stat-value" id="epsilon">1.000</span>
         <span class="stat-label">TD Error:</span><span class="stat-value" id="tderror">-</span>
