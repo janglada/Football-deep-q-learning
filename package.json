@@ -1,0 +1,13 @@
+{
+  "name": "football-deep-q-learning",
+  "version": "1.0.0",
+  "description": "Football simulation using Deep Q-Learning with a browser-based visualisation",
+  "main": "main.js",
+  "scripts": {
+    "start": "npx serve ."
+  },
+  "dependencies": {
+    "highcharts": "^4.1.5"
+  },
+  "license": "MIT"
+}
