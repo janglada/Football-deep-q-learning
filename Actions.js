@@ -10,14 +10,18 @@ var Actions = (function() {
         PASS_2: c++,
         PASS_3: c++,
         PASS_4: c++,
+        PASS_5: c++,
+        PASS_6: c++,
+        PASS_7: c++,
+        PASS_8: c++,
+        PASS_9: c++,
+        PASS_10: c++,
         SHOOT:  c++
     };
 })();
 
 Actions.label = {};
-Actions.label[Actions.PASS_0] = "PASS_0";
-Actions.label[Actions.PASS_1] = "PASS_1";
-Actions.label[Actions.PASS_2] = "PASS_2";
-Actions.label[Actions.PASS_3] = "PASS_3";
-Actions.label[Actions.PASS_4] = "PASS_4";
+for (var i = 0; i <= 10; i++) {
+    Actions.label[Actions["PASS_" + i]] = "PASS_" + i;
+}
 Actions.label[Actions.SHOOT]  = "SHOOT";

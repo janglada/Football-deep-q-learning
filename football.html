@@ -34,8 +34,13 @@
                 .attr("stroke", "black")
                 .attr("stroke-width", "0.2");
 
-            var roleColors = ["#4444ff", "#44aa44", "#aa4444", "#aa4444", "#ff8800"];
-            var players_svg = [0, 1, 2, 3, 4].map(function(i) {
+            var roleColors = [
+                "#4444ff", // GK
+                "#44aa44", "#44aa44", "#44aa44", // DF
+                "#aa4444", "#aa4444", "#aa4444", "#aa4444", // MF
+                "#ff8800", "#ff8800", "#ff8800"  // FW
+            ];
+            var players_svg = new Array(11).fill(0).map(function(_, i) {
                 return svg.append("circle")
                     .attr("r", 0.5)
                     .style("fill", "transparent")
@@ -142,7 +147,7 @@
                         chart.redraw();
 
                         var players = ev.data[2];
-                        if (players && players.length === 5) {
+                        if (players && players.length === 11) {
                             players.forEach(function(p, pidx) {
                                 players_svg[pidx].attr("cx", p.x).attr("cy", p.y);
                                 players_svg[pidx].style("fill", p.ball === 1 ? "red" : "transparent");

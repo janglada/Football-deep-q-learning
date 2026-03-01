@@ -4,16 +4,39 @@ A browser-based simulation that trains a football team to pass and shoot using [
 
 ## What it does
 
-Five players on a 20×40 pitch share a single DQN agent. At each step the agent observes which player holds the ball (a 5-element one-hot state vector) and selects one of six actions:
+Five players (Goalkeeper, Defense, Left Wing, Right Wing, Forward) are positioned at fixed coordinates on a 20×40 pitch. They share a single DQN agent that learns optimal passing and shooting strategies.
 
-| Action | Effect |
-|--------|--------|
-| PASS\_0 … PASS\_4 | Transfer the ball to that player. Reward scales with pass safety (shorter = higher). Passing to yourself gives −10. |
-| SHOOT | Shoot at goal. Reward scales with proximity to the opponent goal. Ball resets to the goalkeeper. |
+At each step, the environment provides a **State Vector**:
+- A **5-element one-hot vector** indicating which player currently has the ball.
 
-The agent learns via experience replay and a target network, decaying ε-greedy exploration from 1 → 0.05 over time.
+The agent selects one of **six discrete actions**:
+- **PASS_0 through PASS_4**: Transfer possession to the corresponding player.
+- **SHOOT**: Attempt a shot at the goal located at `(10, 40)`.
+
+## Reward System
+
+The agent's behavior is shaped by a reward function designed to encourage short, safe passes and moving the ball toward the opponent's goal:
+
+| Action | Reward Formula | Description |
+|--------|----------------|-------------|
+| **Valid Pass** | `0.5 * (1 - smoothstep(0, 40, distance))` | Rewards shorter passes between teammates. |
+| **Invalid Pass** | `-10.0` | Penalty for attempting to pass to the player who already has the ball. |
+| **Shoot** | `1.0 * (1 - smoothstep(0, 40, distance_to_goal))` | Rewards shooting from a position close to the goal (e.g., from the Forward). |
+
+*Note: After a SHOOT action, the simulation resets and possession returns to the Goalkeeper (Player 0).*
 
 ## Architecture
+
+The system uses a **Deep Q-Learning (DQN)** agent with the following specifications:
+
+- **Neural Network**: A feed-forward network with:
+  - **Input Layer**: 5 neurons (one-hot state).
+  - **Hidden Layer**: 50 neurons (using ReLU or Tanh activation).
+  - **Output Layer**: 6 neurons (Q-values for each action).
+- **Training Mechanics**:
+  - **Experience Replay**: Stores the last 1,000 transitions to break correlation between consecutive samples.
+  - **Target Network**: Updated every 100 steps to provide stable Q-value targets.
+  - **Exploration**: $\epsilon$-greedy strategy, decaying from 1.0 to 0.05 over time.
 
 ```
 football.html          — UI: D3 pitch, Highcharts reward chart, controls

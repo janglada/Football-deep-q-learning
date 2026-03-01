@@ -5,38 +5,52 @@
 "use strict";
 
 function Pitch() {
-    this.width  = 20;
+    this.width = 20;
     this.height = 40;
 
-    this.num_players = 5;
+    this.num_players = 11;
     this.players = [];
 
-    this.players.push(new Player(10, 0,  this.width, this.height));  // goal keeper
-    this.players.push(new Player(10, 5,  this.width, this.height));  // defense
-    this.players.push(new Player(5,  15, this.width, this.height));  // left wing
-    this.players.push(new Player(15, 15, this.width, this.height));  // right wing
-    this.players.push(new Player(10, 30, this.width, this.height));  // forward
+    // GK
+    this.players.push(new Player(10, 0, this.width, this.height));
+
+    // DF (3-4-3: 3 Defenders)
+    this.players.push(new Player(5, 8, this.width, this.height));
+    this.players.push(new Player(10, 8, this.width, this.height));
+    this.players.push(new Player(15, 8, this.width, this.height));
+
+    // MF (3-4-3: 4 Midfielders)
+    this.players.push(new Player(2, 18, this.width, this.height));
+    this.players.push(new Player(7, 18, this.width, this.height));
+    this.players.push(new Player(13, 18, this.width, this.height));
+    this.players.push(new Player(18, 18, this.width, this.height));
+
+    // FW (3-4-3: 3 Forwards)
+    this.players.push(new Player(4, 28, this.width, this.height));
+    this.players.push(new Player(10, 28, this.width, this.height));
+    this.players.push(new Player(16, 28, this.width, this.height));
 
     // one-hot: which player currently has the ball
-    this.state = [1, 0, 0, 0, 0];
+    this.state = new Array(this.num_players).fill(0);
+    this.state[0] = 1; // possession starts with GK
 }
 
 Pitch.prototype = {
 
-    getNumStates: function() {
-        return 5;
+    getNumStates: function () {
+        return this.num_players;
     },
 
-    getMaxNumActions: function() {
-        return 6;
+    getMaxNumActions: function () {
+        return this.num_players + 1; // Passes + Shoot
     },
 
-    getState: function() {
+    getState: function () {
         return this.state;
     },
 
-    getPlayersAsJson: function() {
-        return this.players.map(function(player, idx) {
+    getPlayersAsJson: function () {
+        return this.players.map(function (player, idx) {
             return {
                 x: player.getX(),
                 y: player.getY(),
@@ -45,41 +59,28 @@ Pitch.prototype = {
         }, this);
     },
 
-    performAction: function(action) {
+    performAction: function (action) {
         var reward = 0;
 
-        switch (action) {
-            case Actions.PASS_0:
-            case Actions.PASS_1:
-            case Actions.PASS_2:
-            case Actions.PASS_3:
-            case Actions.PASS_4:
-                var player_w_ball_idx = this.state.indexOf(1);
-                if (this.state[action] === 0) {
-                    reward += this.players[action].getPassReward(this.players[player_w_ball_idx]);
-                    this.state[0] = 0;
-                    this.state[1] = 0;
-                    this.state[2] = 0;
-                    this.state[3] = 0;
-                    this.state[4] = 0;
-                    this.state[action] = 1;
-                } else {
-                    reward = -10; // penalty for passing to self
-                }
-                break;
+        if (action >= Actions.PASS_0 && action <= Actions.PASS_10) {
+            var target_idx = action;
+            var current_idx = this.state.indexOf(1);
 
-            case Actions.SHOOT:
-                for (var i = 0; i < this.num_players; i++) {
-                    if (this.state[i] === 1) {
-                        reward += this.players[i].getShootReward();
-                    }
-                    // reset ball to goalkeeper after shot
-                    this.state[i] = (i === 0) ? 1 : 0;
-                }
-                break;
-
-            default:
-                throw new Error("Unknown action [" + action + "]");
+            if (current_idx !== target_idx) {
+                reward += this.players[target_idx].getPassReward(this.players[current_idx]);
+                this.state.fill(0);
+                this.state[target_idx] = 1;
+            } else {
+                reward = -10; // penalty for passing to self
+            }
+        } else if (action === Actions.SHOOT) {
+            var current_idx = this.state.indexOf(1);
+            reward += this.players[current_idx].getShootReward();
+            // reset ball to goalkeeper after shot
+            this.state.fill(0);
+            this.state[0] = 1;
+        } else {
+            throw new Error("Unknown action [" + action + "]");
         }
 
         return reward;

@@ -16,13 +16,13 @@ function World() {
     // create the DQN agent
     var spec = {};
     spec.update = 'qlearn';         // qlearn | sarsa
-    spec.gamma = 0.9;               // discount factor, [0, 1)
+    spec.gamma = 0.95;               // discount factor, [0, 1)
     spec.epsilon = 1;               // initial epsilon for epsilon-greedy policy
     spec.epsilon_min = 0.05;        // minimum epsilon after decay
     spec.epsilon_decay = 0.9995;    // multiplicative decay applied each step
     spec.alpha = 0.005;             // value function learning rate
-    spec.experience_add_every = 5;  // steps between replay buffer insertions
-    spec.experience_size = 1000;    // replay buffer capacity
+    spec.experience_add_every = 10;  // steps between replay buffer insertions
+    spec.experience_size = 2000;    // replay buffer capacity
     spec.learning_steps_per_iteration = 5;
     spec.tderror_clamp = 1.0;       // Huber loss clamp
     spec.num_hidden_units = 50;
@@ -32,51 +32,51 @@ function World() {
 
     this.running = false;
     this.step = 0;
-    this.numSteps = 500;
+    this.numSteps = 1500;
     this.delay = 0;
     this._runCount = 0;
 }
 
 World.prototype = {
 
-    setFast: function() {
-        this.numSteps = 1000;
+    setFast: function () {
+        this.numSteps = 300;
         this.delay = 0;
     },
-    setSlow: function() {
+    setSlow: function () {
         this.numSteps = 1;
         this.delay = 500;
     },
-    setNormal: function() {
+    setNormal: function () {
         this.numSteps = 100;
         this.delay = 500;
     },
 
-    getAgent: function() {
+    getAgent: function () {
         return this.agent;
     },
 
-    start: function() {
+    start: function () {
         this.running = true;
         this._schedule();
     },
 
-    stop: function() {
+    stop: function () {
         this.running = false;
     },
 
-    _schedule: function() {
+    _schedule: function () {
         if (!this.running) return;
         if (this.delay === 0) {
             // Immediate tick via MessageChannel — no >=4ms timer floor
             scheduler.port2.postMessage(null);
         } else {
             var self = this;
-            setTimeout(function() { scheduler.port2.postMessage(null); }, self.delay);
+            setTimeout(function () { scheduler.port2.postMessage(null); }, self.delay);
         }
     },
 
-    _run: function() {
+    _run: function () {
         if (!this.running) return;
 
         var avg_reward = 0;
@@ -109,11 +109,11 @@ World.prototype = {
 var world = new World();
 
 // Drive the training loop from the private scheduler port
-scheduler.port1.onmessage = function() {
+scheduler.port1.onmessage = function () {
     world._run();
 };
 
-self.onmessage = function(e) {
+self.onmessage = function (e) {
     switch (e.data[0]) {
         case "start":
             world.start();
@@ -128,9 +128,9 @@ self.onmessage = function(e) {
             var speed = e.data[1];
             world.stop();
             switch (speed) {
-                case "slow":   world.setSlow();   break;
+                case "slow": world.setSlow(); break;
                 case "normal": world.setNormal(); break;
-                case "fast":   world.setFast();   break;
+                case "fast": world.setFast(); break;
             }
             world.start();
             break;
