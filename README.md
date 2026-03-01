@@ -4,55 +4,94 @@ A browser-based simulation that trains a football team to pass and shoot using [
 
 ## What it does
 
-Five players (Goalkeeper, Defense, Left Wing, Right Wing, Forward) are positioned at fixed coordinates on a 20×40 pitch. They share a single DQN agent that learns optimal passing and shooting strategies.
+Eleven players in a **3-4-3 formation** are positioned at fixed coordinates on a 20×40 pitch. They share a single DQN agent that must discover, through trial and error, that building up play through the midfield and shooting from the forward line produces better outcomes than shooting from deep.
 
-At each step, the environment provides a **State Vector**:
-- A **5-element one-hot vector** indicating which player currently has the ball.
+| Role | Players | Positions (x, y) |
+|------|---------|-----------------|
+| GK | 1 | (10, 0) |
+| DF | 3 | (5,8) (10,8) (15,8) |
+| MF | 4 | (2,18) (7,18) (13,18) (18,18) |
+| FW | 3 | (4,28) (10,28) (16,28) |
 
-The agent selects one of **six discrete actions**:
-- **PASS_0 through PASS_4**: Transfer possession to the corresponding player.
-- **SHOOT**: Attempt a shot at the goal located at `(10, 40)`.
+At each step the environment provides an **11-element one-hot state vector** indicating which player holds the ball. The agent selects one of **12 discrete actions**: pass to any of the 11 players, or shoot.
 
-## Reward System
+## Reward system
 
-The agent's behavior is shaped by a reward function designed to encourage short, safe passes and moving the ball toward the opponent's goal:
+The scheme is **sparse**: passes carry no reward. The only signal comes from shooting.
 
-| Action | Reward Formula | Description |
-|--------|----------------|-------------|
-| **Valid Pass** | `0.5 * (1 - smoothstep(0, 40, distance))` | Rewards shorter passes between teammates. |
-| **Invalid Pass** | `-10.0` | Penalty for attempting to pass to the player who already has the ball. |
-| **Shoot** | `1.0 * (1 - smoothstep(0, 40, distance_to_goal))` | Rewards shooting from a position close to the goal (e.g., from the Forward). |
+| Action | Reward | Notes |
+|--------|--------|-------|
+| Valid pass | `0` | No intermediate reward — credit propagates back via Bellman |
+| Self-pass | `−1` | Penalty scaled to the maximum possible shoot reward |
+| Shoot | `1 − smoothstep(0, 40, dist_to_goal)` | ~0.78 from the forward line, ~0 from the GK position |
 
-*Note: After a SHOOT action, the simulation resets and possession returns to the Goalkeeper (Player 0).*
+After every SHOOT the ball resets to the goalkeeper.
+
+The agent must learn by itself that passing forward before shooting yields higher discounted returns than shooting immediately from deep. No hand-crafted incentive tells it this.
 
 ## Architecture
 
-The system uses a **Deep Q-Learning (DQN)** agent with the following specifications:
-
-- **Neural Network**: A feed-forward network with:
-  - **Input Layer**: 5 neurons (one-hot state).
-  - **Hidden Layer**: 50 neurons (using ReLU or Tanh activation).
-  - **Output Layer**: 6 neurons (Q-values for each action).
-- **Training Mechanics**:
-  - **Experience Replay**: Stores the last 1,000 transitions to break correlation between consecutive samples.
-  - **Target Network**: Updated every 100 steps to provide stable Q-value targets.
-  - **Exploration**: $\epsilon$-greedy strategy, decaying from 1.0 to 0.05 over time.
-
 ```
-football.html          — UI: D3 pitch, Highcharts reward chart, controls
+football.html          — UI: D3 pitch + arrows, two Highcharts, controls
 │
 ├── World.js           — Web Worker: training loop, DQN agent, message bus
 │   ├── Pitch.js       — Environment: state, actions, rewards
 │   ├── Player.js      — Player geometry and reward helpers
-│   ├── Actions.js     — Action constants
+│   ├── Actions.js     — Single source of truth for team size and action encoding
 │   └── lib/rtl.js     — Karpathy's reinforcejs (DQNAgent)
 ```
 
+### DQN hyperparameters
+
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| `gamma` | 0.99 | High discount so shoot reward propagates back across multi-step pass chains |
+| `epsilon` decay | 0.9999995 | Slow decay — sparse rewards need sustained exploration |
+| `epsilon_min` | 0.05 | |
+| `alpha` | 0.005 | |
+| `experience_size` | 5000 | Larger buffer ensures rare rewarding transitions survive long enough to be replayed |
+| `experience_add_every` | 10 | |
+| `learning_steps_per_iteration` | 5 | |
+| `target_update_every` | 100 | |
+| `num_hidden_units` | 50 | |
+
+### Action encoding
+
+`Actions.js` is the **single source of truth** for team size. Action index `i ∈ [0, NUM_PLAYERS)` means "pass to player i"; action `NUM_PLAYERS` means shoot. `Pitch.js` derives `num_players` from `Actions.NUM_PLAYERS` so the two can never drift out of sync.
+
 ### Worker optimisations
 
-- **MessageChannel self-scheduler** — replaces `setInterval`. In fast mode the worker signals itself via `MessageChannel` with no ≥4 ms timer floor, maximising CPU throughput.
+- **MessageChannel self-scheduler** — in fast mode the worker signals itself via `MessageChannel` (no ≥4 ms timer floor), maximising CPU throughput.
 - **Reduced postMessage frequency** — in fast mode stats are serialised and sent to the main thread only every 10 training batches.
-- **Parallel workers + population sync** — one worker is spawned per logical CPU core (max 4). Every 50 messages the best-performing agent's weights are broadcast to all others.
+- **Parallel workers + population sync** — one worker is spawned per logical CPU core (max 5). Every 50 messages the worker with the highest 5-message rolling average reward broadcasts its weights to all others.
+
+## Visualisations
+
+### Pitch (D3)
+Players are drawn as coloured circles (blue = GK, green = DF, red = MF, orange = FW). The ball holder is highlighted in red.
+
+### Policy arrows
+Every 30 training messages the UI requests the agent's current Q-value matrix via a side-effect-free forward pass. One arrow is drawn per player pointing at the `argmax Q` target — another player (pass) or the goal at `(10, 40)` (shoot).
+
+**What to look for:**
+- **Early**: arrows point randomly.
+- **Converging**: arrows form a chain — GK → DF → MF → FW → goal.
+- **Pathology**: all arrows point to the same player, indicating a shortcut rather than genuine strategy.
+
+### Reward chart (Highcharts)
+Average reward per training batch from worker 0, plotted against step count.
+
+### Q-value traces (Highcharts)
+Four key state-action values sampled every 30 messages:
+
+| Series | Expected behaviour |
+|--------|--------------------|
+| Q(GK → shoot) | Stays near 0 — shooting from deep has low discounted value |
+| Q(GK → best pass) | Rises as the agent learns that passing forward is preferable |
+| Q(FW → shoot) | Climbs toward ~0.78 — the primary learning signal |
+| Q(FW → best pass) | Stays low — no benefit in passing away from the goal |
+
+The crossover where `Q(GK → best pass)` overtakes `Q(GK → shoot)` marks the step at which strategy emerges.
 
 ## Getting started
 
@@ -61,7 +100,7 @@ npm install
 npm start        # serves on http://localhost:3000
 ```
 
-Open `http://localhost:3000/football.html`, click **Start**, and watch the reward curve climb.
+Open `http://localhost:3000/football.html`, click **Start**, and select **Fast** to accelerate training.
 
 ## Controls
 
@@ -77,6 +116,6 @@ Open `http://localhost:3000/football.html`, click **Start**, and watch the rewar
 
 | Package | Purpose |
 |---------|---------|
-| [highcharts](https://www.highcharts.com/) v4 | Reward chart |
+| [highcharts](https://www.highcharts.com/) v4 | Reward and Q-value charts |
 | [d3](https://d3js.org/) (bundled in `external/`) | Pitch SVG visualisation |
 | [reinforcejs](https://github.com/karpathy/reinforcejs) (bundled in `lib/`) | DQN agent |
