@@ -2,26 +2,23 @@
  * Created by joan on 2/20/16.
  */
 
-var Actions = (function() {
-    var c = 0;
+"use strict";
+
+// Actions are encoded as integers:
+//   0 … NUM_PLAYERS-1  →  pass to that player index
+//   NUM_PLAYERS         →  shoot
+//
+// This is the single source of truth for team size and action count.
+// Pitch.js derives num_players from Actions.NUM_PLAYERS to stay in sync.
+var Actions = (function () {
+    var NUM_PLAYERS = 11;
     return {
-        PASS_0: c++,
-        PASS_1: c++,
-        PASS_2: c++,
-        PASS_3: c++,
-        PASS_4: c++,
-        PASS_5: c++,
-        PASS_6: c++,
-        PASS_7: c++,
-        PASS_8: c++,
-        PASS_9: c++,
-        PASS_10: c++,
-        SHOOT:  c++
+        NUM_PLAYERS: NUM_PLAYERS,
+        SHOOT: NUM_PLAYERS,
+        isPass: function (action) { return action >= 0 && action < NUM_PLAYERS; },
+        label: function (action) {
+            if (action === NUM_PLAYERS) return "SHOOT";
+            return "PASS_" + action;
+        }
     };
 })();
-
-Actions.label = {};
-for (var i = 0; i <= 10; i++) {
-    Actions.label[Actions["PASS_" + i]] = "PASS_" + i;
-}
-Actions.label[Actions.SHOOT]  = "SHOOT";

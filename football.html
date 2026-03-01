@@ -34,13 +34,16 @@
                 .attr("stroke", "black")
                 .attr("stroke-width", "0.2");
 
+            // Must match Actions.NUM_PLAYERS in the worker.
+            var N_PLAYERS = 11;
+
             var roleColors = [
                 "#4444ff", // GK
                 "#44aa44", "#44aa44", "#44aa44", // DF
                 "#aa4444", "#aa4444", "#aa4444", "#aa4444", // MF
                 "#ff8800", "#ff8800", "#ff8800"  // FW
             ];
-            var players_svg = new Array(11).fill(0).map(function(_, i) {
+            var players_svg = new Array(N_PLAYERS).fill(0).map(function(_, i) {
                 return svg.append("circle")
                     .attr("r", 0.5)
                     .style("fill", "transparent")
@@ -58,9 +61,11 @@
             N_WORKERS = Math.max(N_WORKERS, 1);
 
             var SYNC_INTERVAL = 50; // messages across all workers between population syncs
+            var SYNC_WINDOW   = 5;  // rolling window size for per-worker reward averaging
 
             var workers = [];
-            var workerRecentReward = [];
+            var workerRecentReward = []; // rolling average reward per worker
+            var workerRewardHistory = []; // raw history for rolling average
             var syncPending = false;
             var totalMsgCount = 0;
 
@@ -94,7 +99,8 @@
             });
 
             for (var i = 0; i < N_WORKERS; i++) {
-                workerRecentReward.push(-Infinity);
+                workerRecentReward.push(0);
+                workerRewardHistory.push([]);
                 (function(idx) {
                     var w = new Worker('World.js');
 
@@ -127,7 +133,11 @@
 
                         if (!Array.isArray(ev.data) || ev.data.length < 3) return;
 
-                        workerRecentReward[idx] = ev.data[1];
+                        // Update rolling average reward for this worker.
+                        var hist = workerRewardHistory[idx];
+                        hist.push(ev.data[1]);
+                        if (hist.length > SYNC_WINDOW) hist.shift();
+                        workerRecentReward[idx] = hist.reduce(function (a, b) { return a + b; }, 0) / hist.length;
 
                         // Population sync: find best worker and broadcast its weights
                         totalMsgCount++;
@@ -147,7 +157,7 @@
                         chart.redraw();
 
                         var players = ev.data[2];
-                        if (players && players.length === 11) {
+                        if (players && players.length === N_PLAYERS) {
                             players.forEach(function(p, pidx) {
                                 players_svg[pidx].attr("cx", p.x).attr("cy", p.y);
                                 players_svg[pidx].style("fill", p.ball === 1 ? "red" : "transparent");

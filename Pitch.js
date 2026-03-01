@@ -8,7 +8,7 @@ function Pitch() {
     this.width = 20;
     this.height = 40;
 
-    this.num_players = 11;
+    this.num_players = Actions.NUM_PLAYERS; // keep in sync with Actions.js
     this.players = [];
 
     // GK
@@ -61,21 +61,19 @@ Pitch.prototype = {
 
     performAction: function (action) {
         var reward = 0;
+        var current_idx = this.state.indexOf(1);
 
-        if (action >= Actions.PASS_0 && action <= Actions.PASS_10) {
+        if (Actions.isPass(action)) {
             var target_idx = action;
-            var current_idx = this.state.indexOf(1);
-
             if (current_idx !== target_idx) {
-                reward += this.players[target_idx].getPassReward(this.players[current_idx]);
+                reward = this.players[target_idx].getPassReward(this.players[current_idx]);
                 this.state.fill(0);
                 this.state[target_idx] = 1;
             } else {
                 reward = -10; // penalty for passing to self
             }
         } else if (action === Actions.SHOOT) {
-            var current_idx = this.state.indexOf(1);
-            reward += this.players[current_idx].getShootReward();
+            reward = this.players[current_idx].getShootReward();
             // reset ball to goalkeeper after shot
             this.state.fill(0);
             this.state[0] = 1;
