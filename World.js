@@ -20,7 +20,7 @@ function World() {
                                     // credit propagates back across multi-step pass chains
     spec.epsilon = 1;               // initial epsilon for epsilon-greedy policy
     spec.epsilon_min = 0.05;        // minimum epsilon after decay
-    spec.epsilon_decay = 0.9995;    // multiplicative decay applied each step
+    spec.epsilon_decay = 0.9999995;    // multiplicative decay applied each step
     spec.alpha = 0.005;             // value function learning rate
     spec.experience_add_every = 10;  // steps between replay buffer insertions
     spec.experience_size = 5000;    // larger buffer needed for sparse reward credit assignment
@@ -75,6 +75,20 @@ World.prototype = {
             var self = this;
             setTimeout(function () { scheduler.port2.postMessage(null); }, self.delay);
         }
+    },
+
+    // Returns a [numPlayers][numActions] matrix of Q-values computed by a
+    // pure forward pass — no side effects on agent state or learning.
+    queryQValues: function () {
+        var ns = this.env.getNumStates();
+        var result = [];
+        for (var i = 0; i < ns; i++) {
+            var s = new R.Mat(ns, 1); // column vector, all zeros
+            s.w[i] = 1;              // one-hot: player i holds the ball
+            var qmat = this.agent.forwardQ(this.agent.net, s, false);
+            result.push(Array.prototype.slice.call(qmat.w));
+        }
+        return result;
     },
 
     _run: function () {
@@ -144,6 +158,9 @@ self.onmessage = function (e) {
             break;
         case "load":
             world.getAgent().fromJSON(e.data[1]);
+            break;
+        case "query":
+            postMessage({ type: 'qvalues', data: world.queryQValues() });
             break;
     }
 };

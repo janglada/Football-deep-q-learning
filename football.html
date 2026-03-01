@@ -51,13 +51,55 @@
                     .style("stroke", roleColors[i]);
             });
 
+            // --- Policy arrows (D3) ---
+            // One arrow per player showing the agent's greedy action (argmax Q).
+            svg.append("defs").append("marker")
+                .attr("id", "arrow")
+                .attr("viewBox", "0 0 6 6")
+                .attr("refX", "5").attr("refY", "3")
+                .attr("markerWidth", "2.5").attr("markerHeight", "2.5")
+                .attr("orient", "auto")
+                .attr("markerUnits", "userSpaceOnUse")
+                .append("path").attr("d", "M0,0 L6,3 L0,6 z").attr("fill", "#222");
+
+            var arrows = new Array(N_PLAYERS).fill(null).map(function () {
+                return svg.append("line")
+                    .attr("stroke", "#222")
+                    .attr("stroke-width", "0.15")
+                    .attr("marker-end", "url(#arrow)")
+                    .style("display", "none");
+            });
+
+            function updateArrows(qMatrix, players) {
+                var SHOOT_ACTION = N_PLAYERS;
+                for (var i = 0; i < N_PLAYERS; i++) {
+                    var qRow = qMatrix[i];
+                    var bestAction = 0;
+                    for (var j = 1; j < qRow.length; j++) {
+                        if (qRow[j] > qRow[bestAction]) bestAction = j;
+                    }
+                    var fromX = players[i].x, fromY = players[i].y;
+                    var toX = (bestAction === SHOOT_ACTION) ? 10  : players[bestAction].x;
+                    var toY = (bestAction === SHOOT_ACTION) ? 40  : players[bestAction].y;
+                    var dx = toX - fromX, dy = toY - fromY;
+                    var len = Math.sqrt(dx * dx + dy * dy);
+                    if (len < 0.01) { arrows[i].style("display", "none"); continue; }
+                    var ux = dx / len, uy = dy / len, r = 0.65;
+                    arrows[i]
+                        .attr("x1", fromX + ux * r).attr("y1", fromY + uy * r)
+                        .attr("x2", toX  - ux * r).attr("y2", toY  - uy * r)
+                        .style("display", null);
+                }
+            }
+
             // --- Parallel Web Workers ---
             // Use one worker per logical CPU core (minus one for the main thread), capped at 4.
             // Each worker trains an independent DQN agent. Every SYNC_INTERVAL messages the
             // best-performing agent's weights are broadcast to all others (population sync).
+            var MAX_N_WORKERS =  5;
             var N_WORKERS = navigator.hardwareConcurrency
-                ? Math.min(navigator.hardwareConcurrency - 1, 4)
-                : 4;
+                ? Math.min(navigator.hardwareConcurrency - 1, MAX_N_WORKERS)
+                : MAX_N_WORKERS;
             N_WORKERS = Math.max(N_WORKERS, 1);
 
             var SYNC_INTERVAL = 50; // messages across all workers between population syncs
@@ -98,6 +140,33 @@
                 }]
             });
 
+            // --- Q-value traces chart (Highcharts) ---
+            // Tracks Q-values for two key positions over training time.
+            // GK (idx 0) and center FW (idx 9) are the diagnostic pair:
+            // a learning agent should converge to Q(FW→shoot) >> Q(GK→shoot).
+            var GK_IDX = 0, FW_IDX = 9, SHOOT_ACTION = N_PLAYERS;
+            var qChart = new Highcharts.Chart({
+                chart: { renderTo: document.getElementById('qvalue-container'), animation: false },
+                title: { text: 'Q-values — key state/action pairs (worker 0)' },
+                xAxis: { title: { text: 'Steps' } },
+                yAxis: { title: { text: 'Q-value' } },
+                plotOptions: {
+                    line: { animation: false, marker: { enabled: false }, tooltip: { enabled: false } }
+                },
+                series: [
+                    { name: 'Q(GK → shoot)',      type: 'line', color: '#4444ff', data: [] },
+                    { name: 'Q(GK → best pass)',  type: 'line', color: '#88aaff', dashStyle: 'Dash', data: [] },
+                    { name: 'Q(FW → shoot)',      type: 'line', color: '#ff8800', data: [] },
+                    { name: 'Q(FW → best pass)',  type: 'line', color: '#ffbb66', dashStyle: 'Dash', data: [] }
+                ]
+            });
+
+            // State shared between training messages and query responses.
+            var lastPlayers = null;
+            var lastStep = 0;
+            var queryMsgCount = 0;
+            var QUERY_INTERVAL = 30; // request Q-values every N training messages from worker 0
+
             for (var i = 0; i < N_WORKERS; i++) {
                 workerRecentReward.push(0);
                 workerRewardHistory.push([]);
@@ -111,6 +180,21 @@
                     };
 
                     w.onmessage = function(ev) {
+                        // Q-value query response: update arrows + traces
+                        if (ev.data && ev.data.type === 'qvalues') {
+                            if (lastPlayers) updateArrows(ev.data.data, lastPlayers);
+                            var qm = ev.data.data;
+                            var gkRow = qm[GK_IDX], fwRow = qm[FW_IDX];
+                            var gkBestPass = Math.max.apply(null, gkRow.slice(0, N_PLAYERS));
+                            var fwBestPass = Math.max.apply(null, fwRow.slice(0, N_PLAYERS));
+                            qChart.series[0].addPoint([lastStep, gkRow[SHOOT_ACTION]], false, false);
+                            qChart.series[1].addPoint([lastStep, gkBestPass],          false, false);
+                            qChart.series[2].addPoint([lastStep, fwRow[SHOOT_ACTION]], false, false);
+                            qChart.series[3].addPoint([lastStep, fwBestPass],          false, false);
+                            qChart.redraw();
+                            return;
+                        }
+
                         // Population sync response: distribute to all other workers
                         if (ev.data && ev.data.type === 'sync_model') {
                             workers.forEach(function(other, j) {
@@ -153,15 +237,23 @@
                         // UI updates driven by worker 0 only
                         if (idx !== 0) return;
 
+                        lastStep = ev.data[0];
                         chart.series[0].addPoint(ev.data.slice(0, 2), false, false);
                         chart.redraw();
 
                         var players = ev.data[2];
                         if (players && players.length === N_PLAYERS) {
+                            lastPlayers = players;
                             players.forEach(function(p, pidx) {
                                 players_svg[pidx].attr("cx", p.x).attr("cy", p.y);
                                 players_svg[pidx].style("fill", p.ball === 1 ? "red" : "transparent");
                             });
+                        }
+
+                        // Periodically request Q-values for arrow + trace update.
+                        queryMsgCount++;
+                        if (queryMsgCount % QUERY_INTERVAL === 0) {
+                            workers[0].postMessage(['query']);
                         }
 
                         document.getElementById("step-count").textContent = ev.data[0];
@@ -262,8 +354,11 @@
     </div>
 
     <div style="margin-top:10px;">
-        <div id="container" style="display:inline-block;width:800px;height:450px;"></div>
-        <div id="pitch"     style="display:inline-block;width:200px;height:400px;"></div>
+        <div id="container" style="display:inline-block;width:800px;height:400px;"></div>
+        <div id="pitch"     style="display:inline-block;width:200px;height:400px;vertical-align:top;"></div>
+    </div>
+    <div style="margin-top:6px;">
+        <div id="qvalue-container" style="width:800px;height:300px;"></div>
     </div>
 </body>
 </html>
