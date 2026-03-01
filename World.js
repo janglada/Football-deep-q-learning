@@ -16,13 +16,14 @@ function World() {
     // create the DQN agent
     var spec = {};
     spec.update = 'qlearn';         // qlearn | sarsa
-    spec.gamma = 0.95;               // discount factor, [0, 1)
+    spec.gamma = 0.99;               // discount factor — raised for sparse rewards so
+                                    // credit propagates back across multi-step pass chains
     spec.epsilon = 1;               // initial epsilon for epsilon-greedy policy
     spec.epsilon_min = 0.05;        // minimum epsilon after decay
     spec.epsilon_decay = 0.9995;    // multiplicative decay applied each step
     spec.alpha = 0.005;             // value function learning rate
     spec.experience_add_every = 10;  // steps between replay buffer insertions
-    spec.experience_size = 2000;    // replay buffer capacity
+    spec.experience_size = 5000;    // larger buffer needed for sparse reward credit assignment
     spec.learning_steps_per_iteration = 5;
     spec.tderror_clamp = 1.0;       // Huber loss clamp
     spec.num_hidden_units = 50;

@@ -38,12 +38,9 @@ Player.prototype = {
     },
 
     // from_player: the player currently holding the ball (passing to `this`).
+    // Sparse scheme: passes carry no reward; credit is assigned entirely through
+    // the discounted shoot reward propagated back by the Bellman equation.
     getPassReward: function (from_player) {
-        var d = _distance(this.x, this.y, from_player.getX(), from_player.getY());
-        // Safety: penalise long/risky passes.
-        var safety   = 1 - _smoothstep(0, this.pitch_height, d);
-        // Progress: reward passing the ball forward toward the opponent goal.
-        var progress = Math.max(0, this.y - from_player.getY()) / this.pitch_height;
-        return 0.4 * safety + 0.6 * progress;
+        return 0;
     }
 };

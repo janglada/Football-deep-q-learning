@@ -21,13 +21,13 @@ function Pitch() {
 
     // MF (3-4-3: 4 Midfielders)
     this.players.push(new Player(2, 18, this.width, this.height));
-    this.players.push(new Player(7, 18, this.width, this.height));
-    this.players.push(new Player(13, 18, this.width, this.height));
+    this.players.push(new Player(10, 13, this.width, this.height));
+    this.players.push(new Player(10, 23, this.width, this.height));
     this.players.push(new Player(18, 18, this.width, this.height));
 
     // FW (3-4-3: 3 Forwards)
     this.players.push(new Player(4, 28, this.width, this.height));
-    this.players.push(new Player(10, 28, this.width, this.height));
+    this.players.push(new Player(10, 31, this.width, this.height));
     this.players.push(new Player(16, 28, this.width, this.height));
 
     // one-hot: which player currently has the ball
@@ -70,7 +70,7 @@ Pitch.prototype = {
                 this.state.fill(0);
                 this.state[target_idx] = 1;
             } else {
-                reward = -10; // penalty for passing to self
+                reward = -1; // penalty for passing to self (scaled to match max shoot reward of 1.0)
             }
         } else if (action === Actions.SHOOT) {
             reward = this.players[current_idx].getShootReward();
